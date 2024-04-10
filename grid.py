@@ -50,7 +50,7 @@ class Grid:
         move = valid_moves[rand_index]
         col = self.column_map[f'COL{move}']
         update_made = False
-        for i in range(self.GRID_HEIGHT - 1):
+        for i in range(self.GRID_HEIGHT):
             if self.grid[i][col] == ' ':
                 self.grid[i][col] = self.OPPONENT
                 update_made = True
@@ -103,23 +103,24 @@ class Grid:
                     previous_color = None
                     continue
 
-        # check if game is won diagonally
+        # check if game is won diagonally (bottom-left to top-right)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(self.GRID_WIDTH - 3):
+                actual_col = self.column_map[f'COL{col + 1}']
+                next_col1 = self.column_map[f'COL{col + 2}']
+                next_col2 = self.column_map[f'COL{col + 3}']
+                next_col3 = self.column_map[f'COL{col + 4}']
+                if (self.grid[row][actual_col] == self.grid[row + 1][next_col1] == self.grid[row + 2][next_col2] == self.grid[row + 3][next_col3]) and (self.grid[row][actual_col] != ' '):
+                    return True
 
-        # Check diagonals from bottom-left to top-right
-        # for start_row in range(self.GRID_HEIGHT - 3):
-        #     for start_col in range(self.GRID_WIDTH - 3):
-        #         if (self.grid[start_row][start_col] == self.PLAYER and
-        #                 self.grid[start_row + 1][start_col + 1] == self.PLAYER and
-        #                 self.grid[start_row + 2][start_col + 2] == self.PLAYER and
-        #                 self.grid[start_row + 3][start_col + 3] == self.PLAYER):
-        #             game_won = True
-        #
-        # # Check diagonals from top-left to bottom-right
-        # for start_row in range(3, self.GRID_HEIGHT):
-        #     for start_col in range(self.GRID_WIDTH - 3):
-        #         if (self.grid[start_row][start_col] == self.PLAYER and
-        #                 self.grid[start_row - 1][start_col + 1] == self.PLAYER and
-        #                 self.grid[start_row - 2][start_col + 2] == self.PLAYER and
-        #                 self.grid[start_row - 3][start_col + 3] == self.PLAYER):
-        #             game_won = True
+        # check if game is won diagonally (bottom-right to top-left)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(3, self.GRID_WIDTH):
+                actual_col = self.column_map[f'COL{col + 1}']
+                next_col1 = self.column_map[f'COL{col}']
+                next_col2 = self.column_map[f'COL{col - 1}']
+                next_col3 = self.column_map[f'COL{col - 2}']
+                if (self.grid[row][actual_col] == self.grid[row + 1][next_col1] == self.grid[row + 2][next_col2] == self.grid[row + 3][next_col3]) and (self.grid[row][actual_col] != ' '):
+                    return True
+
         return False
