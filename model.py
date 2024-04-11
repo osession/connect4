@@ -1,7 +1,8 @@
 import random
 from PyQt5.QtCore import QObject
 from controller import Communicate
-from typing import Tuple
+from typing import Tuple, Union
+
 
 class Grid(QObject):
     def __init__(self, communicate):
@@ -40,10 +41,124 @@ class Grid(QObject):
             print(''.join(row))
         # make opponent move (and update the grid)
         opponent_row, opponent_col = self.makeRandomOpponentMove()
+        self.checkIfGameOver()
         # send the move back to the GUI
         self.communicate.opponent_move.emit(opponent_row, opponent_col)
+
     def makeStrategicOpponentMove(self) -> None:
         pass
+
+    def minimax(self, state, depth, maximizing_player=True):
+        if depth == 0 or len(state.get_valid_moves()) == 0:
+            return self.evaluate(state), None
+
+        valid_moves = state.get_valid_moves()
+
+        if maximizing_player:
+            best_score = float('-inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
+                new_state.simulate_move(move[0], move[1])
+                score, _ = self.minimax(new_state, depth - 1, False)
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+            return best_score, best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
+                new_state.simulate_move(move[0], move[1])
+                score, _ = self.minimax(new_state, depth - 1, True)
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+            return best_score, best_move
+
+    def alphaBeta(self, state, depth, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
+        if depth == 0 or len(state.get_valid_moves()) == 0:
+            return self.evaluate(state), None
+
+        valid_moves = state.get_valid_moves()
+
+        if maximizing_player:
+            best_score = float('-inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
+                new_state.simulate_move(move[0], move[1])
+                score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, False)
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                alpha = max(alpha, score)
+                if beta <= alpha:
+                    break
+            return best_score, best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
+                new_state.simulate_move(move[0], move[1])
+                score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, True)
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+                beta = min(beta, score)
+                if alpha <= beta:
+                    break
+            return best_score, best_move
+    def heuristicFunction(self) -> float:
+        opponent_score = 0
+        player_score = 0
+
+        # Evaluate the score based on horizontal connections
+        for row in range(self.GRID_HEIGHT):
+            for col in range(self.GRID_WIDTH - 3):
+                window = self.grid[row][col:col + 4]
+                opponent_score += self.evaluateWindow(window, self.PLAYER)
+                player_score += self.evaluateWindow(window, self.OPPONENT)
+
+        # Evaluate the score based on vertical connections
+        for col in range(self.GRID_WIDTH):
+            for row in range(self.GRID_HEIGHT - 3):
+                window = [self.grid[row + i][col] for i in range(4)]
+                opponent_score += self.evaluateWindow(window, self.PLAYER)
+                player_score += self.evaluateWindow(window, self.OPPONENT)
+
+        # Evaluate the score based on diagonal connections (bottom-left to top-right)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(self.GRID_WIDTH - 3):
+                window = [self.grid[row + i][col + i] for i in range(4)]
+                opponent_score += self.evaluateWindow(window, self.PLAYER)
+                player_score += self.evaluateWindow(window, self.OPPONENT)
+
+        # Evaluate the score based on diagonal connections (bottom-right to top-left)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(3, self.GRID_WIDTH):
+                window = [self.grid[row + i][col - i] for i in range(4)]
+                opponent_score += self.evaluateWindow(window, self.PLAYER)
+                player_score += self.evaluateWindow(window, self.OPPONENT)
+
+        return opponent_score - player_score
+
+    def evaluateWindow(self, window: list, player: str) -> int:
+        score = 0
+        opponent = self.PLAYER if player == self.OPPONENT else self.OPPONENT
+        if window.count(player) == 4:
+            score += 100
+        elif window.count(player) == 3 and window.count(' ') == 1:
+            score += 5
+        elif window.count(player) == 2 and window.count(' ') == 2:
+            score += 2
+
+        if window.count(opponent) == 3 and window.count(' ') == 1:
+            score -= 4
+
+        return score
 
     def makeRandomOpponentMove(self) -> Tuple[int, int]:
         valid_moves = self.getValidMoves()
@@ -61,69 +176,68 @@ class Grid(QObject):
             raise IndexError('Invalid move. Column is already full.')
 
         return row, col
-    #
-    # def checkIfGameOver(self) -> bool:
-    #     # check if game is won vertically
-    #     for col in range(self.GRID_WIDTH):
-    #         previous_color = None
-    #         num_continuous = 1
-    #         actual_col = self.column_map[f'COL{col + 1}']
-    #         for row in range(self.GRID_HEIGHT):
-    #             if previous_color is None:
-    #                 previous_color = self.grid[row][actual_col]
-    #                 continue
-    #             token = self.grid[row][actual_col]
-    #             if token != ' ':
-    #                 if token == previous_color:
-    #                     num_continuous += 1
-    #                     if num_continuous == 4:
-    #                         return True
-    #                 else:
-    #                     num_continuous = 1
-    #                 previous_color = token
-    #             else:
-    #                 break
-    #
-    #     # check if game is won horizontally
-    #     for row in range(self.GRID_HEIGHT):
-    #         previous_color = None
-    #         num_continuous = 1
-    #         for col in range(self.GRID_WIDTH):
-    #             actual_col = self.column_map[f'COL{col + 1}']
-    #             if previous_color is None:
-    #                 previous_color = self.grid[row][actual_col]
-    #                 continue
-    #             token = self.grid[row][actual_col]
-    #             if token != ' ':
-    #                 if token == previous_color:
-    #                     num_continuous += 1
-    #                     if num_continuous == 4:
-    #                         return True
-    #                 else:
-    #                     num_continuous = 1
-    #                 previous_color = token
-    #             else:
-    #                 previous_color = None
-    #                 continue
-    #
-    #     # check if game is won diagonally (bottom-left to top-right)
-    #     for row in range(self.GRID_HEIGHT - 3):
-    #         for col in range(self.GRID_WIDTH - 3):
-    #             actual_col = self.column_map[f'COL{col + 1}']
-    #             next_col1 = self.column_map[f'COL{col + 2}']
-    #             next_col2 = self.column_map[f'COL{col + 3}']
-    #             next_col3 = self.column_map[f'COL{col + 4}']
-    #             if (self.grid[row][actual_col] == self.grid[row + 1][next_col1] == self.grid[row + 2][next_col2] == self.grid[row + 3][next_col3]) and (self.grid[row][actual_col] != ' '):
-    #                 return True
-    #
-    #     # check if game is won diagonally (bottom-right to top-left)
-    #     for row in range(self.GRID_HEIGHT - 3):
-    #         for col in range(3, self.GRID_WIDTH):
-    #             actual_col = self.column_map[f'COL{col + 1}']
-    #             next_col1 = self.column_map[f'COL{col}']
-    #             next_col2 = self.column_map[f'COL{col - 1}']
-    #             next_col3 = self.column_map[f'COL{col - 2}']
-    #             if (self.grid[row][actual_col] == self.grid[row + 1][next_col1] == self.grid[row + 2][next_col2] == self.grid[row + 3][next_col3]) and (self.grid[row][actual_col] != ' '):
-    #                 return True
-    #
-    #     return False
+
+    def checkIfGameOver(self) -> Union[str, None]:
+        # returns the self.PLAYER or self.OPPONENT to tell who won (or None if game is not over yet)
+        # check if game is won vertically
+        for col in range(self.GRID_WIDTH):
+            previous_color = None
+            num_continuous = 1
+            for row in range(self.GRID_HEIGHT):
+                if previous_color is None:
+                    previous_color = self.grid[row][col]
+                    continue
+                token = self.grid[row][col]
+                if token != ' ':
+                    if token == previous_color:
+                        num_continuous += 1
+                        if num_continuous == 4:
+                            print('WON VERTICALLY')
+                            self.communicate.game_over.emit(token)
+                            return token
+                    else:
+                        num_continuous = 1
+                    previous_color = token
+                else:
+                    break
+
+        # check if game is won horizontally
+        for row in range(self.GRID_HEIGHT):
+            previous_color = None
+            num_continuous = 1
+            for col in range(self.GRID_WIDTH):
+                if previous_color is None:
+                    previous_color = self.grid[row][col]
+                    continue
+                token = self.grid[row][col]
+                if token != ' ':
+                    if token == previous_color:
+                        num_continuous += 1
+                        if num_continuous == 4:
+                            print('WON HORIZONTALLY')
+                            self.communicate.game_over.emit(token)
+                            return token
+                    else:
+                        num_continuous = 1
+                    previous_color = token
+                else:
+                    previous_color = None
+                    continue
+
+        # check if game is won diagonally (bottom-left to top-right)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(self.GRID_WIDTH - 3):
+                if (self.grid[row][col] == self.grid[row + 1][col+1] == self.grid[row + 2][col+2] == self.grid[row + 3][col+3]) and (self.grid[row][col] != ' '):
+                    print('WON DIAGONALLY')
+                    self.communicate.game_over.emit(self.grid[row][col])
+                    return self.grid[row][col]
+
+        # check if game is won diagonally (bottom-right to top-left)
+        for row in range(self.GRID_HEIGHT - 3):
+            for col in range(3, self.GRID_WIDTH):
+                if (self.grid[row][col] == self.grid[row + 1][col-1] == self.grid[row + 2][col-2] == self.grid[row + 3][col-3]) and (self.grid[row][col] != ' '):
+                    print('WON DIAGONALLY')
+                    self.communicate.game_over.emit(self.grid[row][col])
+                    return self.grid[row][col]
+
+        self.communicate.game_over.emit(None)
