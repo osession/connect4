@@ -1,7 +1,7 @@
 import random
 from PyQt5.QtCore import QObject
-from controller import Communicate
 from typing import Tuple, Union
+import copy
 
 
 class Grid(QObject):
@@ -24,11 +24,11 @@ class Grid(QObject):
         self.GRID_HEIGHT = 6
         self.GRID_WIDTH = 7
 
-    def getValidMoves(self) -> list:
+    def getValidMoves(self, grid: list[list[str]]) -> list:
         valid_moves = []
         for col in range(self.GRID_WIDTH):
             for row in range(self.GRID_HEIGHT):
-                if self.grid[row][col] == ' ':
+                if grid[row][col] == ' ':
                     valid_moves.append(col)
                     break
         print(valid_moves)
@@ -49,17 +49,16 @@ class Grid(QObject):
         pass
 
     def minimax(self, state, depth, maximizing_player=True):
-        if depth == 0 or len(state.get_valid_moves()) == 0:
+        if depth == 0 or len(self.getValidMoves(state)) == 0:
             return self.evaluate(state), None
 
-        valid_moves = state.get_valid_moves()
+        valid_moves = self.getValidMoves(state)
 
         if maximizing_player:
             best_score = float('-inf')
             best_move = None
             for move in valid_moves:
-                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
-                new_state.simulate_move(move[0], move[1])
+                new_state = self.getNewState(move)
                 score, _ = self.minimax(new_state, depth - 1, False)
                 if score > best_score:
                     best_score = score
@@ -69,8 +68,7 @@ class Grid(QObject):
             best_score = float('inf')
             best_move = None
             for move in valid_moves:
-                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
-                new_state.simulate_move(move[0], move[1])
+                new_state = self.getNewState(move)
                 score, _ = self.minimax(new_state, depth - 1, True)
                 if score < best_score:
                     best_score = score
@@ -78,17 +76,16 @@ class Grid(QObject):
             return best_score, best_move
 
     def alphaBeta(self, state, depth, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
-        if depth == 0 or len(state.get_valid_moves()) == 0:
+        if depth == 0 or len(self.getValidMoves(state)) == 0:
             return self.evaluate(state), None
 
-        valid_moves = state.get_valid_moves()
+        valid_moves = self.getValidMoves(state)
 
         if maximizing_player:
             best_score = float('-inf')
             best_move = None
             for move in valid_moves:
-                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
-                new_state.simulate_move(move[0], move[1])
+                new_state = self.getNewState(move)
                 score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, False)
                 if score > best_score:
                     best_score = score
@@ -101,8 +98,7 @@ class Grid(QObject):
             best_score = float('inf')
             best_move = None
             for move in valid_moves:
-                new_state = reversi.ReversiGameState(np.copy(state.board), state.turn)
-                new_state.simulate_move(move[0], move[1])
+                new_state = self.getNewState(move)
                 score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, True)
                 if score < best_score:
                     best_score = score
@@ -176,6 +172,14 @@ class Grid(QObject):
             raise IndexError('Invalid move. Column is already full.')
 
         return row, col
+
+    def getNewState(self, move: int):
+        new_state = copy.deepcopy(self.grid)
+        for row in range(self.GRID_HEIGHT):
+            if new_state[row][move] == ' ':
+                new_state[row][move] = self.OPPONENT
+                break
+        return new_state
 
     def checkIfGameOver(self) -> Union[str, None]:
         # returns the self.PLAYER or self.OPPONENT to tell who won (or None if game is not over yet)
