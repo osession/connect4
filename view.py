@@ -62,6 +62,8 @@ class Connect4(QWidget):
             self.communicate.user_move.emit(row, col)
 
     def updateViewWithOpponentMove(self, row: int, col: int):
+        if row is None or col is None:
+            return
         button = self.buttons[row][col]
         if button.styleSheet() == "background-color: white":
             button.setStyleSheet("background-color: red")

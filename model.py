@@ -36,7 +36,10 @@ class Grid(QObject):
     def receiveUserMoveAndEmitOpponentMove(self, user_row: int, user_col: int) -> None:
         # update the grid with the user move
         self.grid[user_row][user_col] = self.PLAYER
-        self.checkIfGameOver()
+
+        winning_piece = self.checkIfGameOver(self.grid)
+        if winning_piece:
+            self.communicate.game_over.emit(winning_piece)
         # for row in self.grid[::-1]:
         #     print(''.join(row))
         # make opponent move (and update the grid)
@@ -45,13 +48,16 @@ class Grid(QObject):
         print(f'BEST MOVE: {opponent_col}')
         # find the corresponding row and update the grid for the model
         opponent_row = None
-        for row in range(self.GRID_HEIGHT):
-            if self.grid[row][opponent_col] == ' ':
-                self.grid[row][opponent_col] = self.OPPONENT
-                opponent_row = row
-                break
+        if opponent_col is not None:
+            for row in range(self.GRID_HEIGHT):
+                if self.grid[row][opponent_col] == ' ':
+                    self.grid[row][opponent_col] = self.OPPONENT
+                    opponent_row = row
+                    break
 
-        self.checkIfGameOver()
+        winning_piece = self.checkIfGameOver(self.grid)
+        if winning_piece:
+            self.communicate.game_over.emit(winning_piece)
         # send the move back to the GUI
         self.communicate.opponent_move.emit(opponent_row, opponent_col)
 
@@ -61,19 +67,31 @@ class Grid(QObject):
         pass
 
     def minimax(self, state: list, depth: int = 5, maximizing_player=True):
-        if depth == 0 or len(self.getValidMoves(state)) == 0:
-            if maximizing_player:
-                return self.evaluate(state, self.PLAYER), None
-            else:
-                return self.evaluate(state, self.OPPONENT), None
+        # if depth == 0 or len(self.getValidMoves(state)) == 0:
+        #     if maximizing_player:
+        #         return self.evaluate(state, self.PLAYER), None
+        #     else:
+        #         return self.evaluate(state, self.OPPONENT), None
 
         valid_moves = self.getValidMoves(state)
+        winning_piece = self.checkIfGameOver(state)
+        is_terminal = True if len(valid_moves) == 0 or winning_piece is not None else False
+        if depth == 0 or is_terminal:
+            if is_terminal:
+                if winning_piece == self.OPPONENT:
+                    return (100000000000000, None)
+                elif winning_piece == self.PLAYER:
+                    return (-10000000000000, None)
+                else:  # Game is over, no more valid moves
+                    return (0, None)
+            else:  # Depth is zero
+                return (self.evaluate(state, self.OPPONENT), None)
 
         if maximizing_player:
             best_score = float('-inf')
             best_move = None
             for move in valid_moves:
-                new_state = self.getNewState(move)
+                new_state = self.getNewState(move, copy.deepcopy(state))
                 score, _ = self.minimax(new_state, depth - 1, False)
                 print(f'maximizing player score: {score}')
                 print(f'maximizing player move: {move}')
@@ -81,11 +99,24 @@ class Grid(QObject):
                     best_score = score
                     best_move = move
             return best_score, best_move
+        # if maximizing_player:
+        #     value = float('-inf')
+        #     column = random.choice(valid_moves)
+        #     for col in valid_moves:
+        #         new_state = self.getNewState(col)
+        #         new_score = minimax(b_copy, depth - 1, alpha, beta, False)[1]
+        #         if new_score > value:
+        #             value = new_score
+        #             column = col
+        #         alpha = max(alpha, value)
+        #         if alpha >= beta:
+        #             break
+        #     return column, value
         else:
             best_score = float('inf')
             best_move = None
             for move in valid_moves:
-                new_state = self.getNewState(move)
+                new_state = self.getNewState(move, copy.deepcopy(state))
                 score, _ = self.minimax(new_state, depth - 1, True)
                 print(f'minimizing player score: {score}')
                 print(f'minimizing player move: {move}')
@@ -129,162 +160,61 @@ class Grid(QObject):
     #                 break
     #         return best_score, best_move
 
-    def evaluate(self, state: list, player: str):
-        # current_player_score = self.evaluate_helper(state, player)
-        # current_opponent_score = self.evaluate_helper(state, player)
-        # return current_player_score - current_opponent_score
-        opponent = self.PLAYER if player == self.OPPONENT else self.OPPONENT
-        consecutive_chips_opponent = self.get_consecutive_chips(state, opponent)
-        consecutive_chips_player = self.get_consecutive_chips(state, player)
-        is_blocking_move: bool = self.get_is_blocked(state, player)
+    def evaluate(self, board, piece):
+        score = 0
+        WINDOW_LENGTH = 4
+        ## Score center column
+        center_array = [token for token in list(board[:][self.GRID_WIDTH // 2])]
+        center_count = center_array.count(piece)
+        score += center_count * 3
 
-        score = consecutive_chips_player ** 3 - consecutive_chips_opponent ** 3
-        if is_blocking_move:
-            score += 200
+        ## Score Horizontal
+        for r in range(self.GRID_HEIGHT):
+            row_array = [token for token in list(board[r][:])]
+            for c in range(self.GRID_WIDTH - 3):
+                window = row_array[c:c + WINDOW_LENGTH]
+                score += self.evaluate_window(window, piece)
+
+        ## Score Vertical
+        for c in range(self.GRID_WIDTH):
+            # col_array = [token for token in list(board[:][c])] # This is not a numpy array
+            col_array = []
+            for i in range(self.GRID_HEIGHT):
+                col_array.append(board[i][c])
+            for r in range(self.GRID_HEIGHT - 3):
+                window = col_array[r:r + WINDOW_LENGTH]
+                score += self.evaluate_window(window, piece)
+
+        ## Score posiive sloped diagonal
+        for r in range(self.GRID_HEIGHT - 3):
+            for c in range(self.GRID_WIDTH - 3):
+                window = [board[r + i][c + i] for i in range(WINDOW_LENGTH)]
+                score += self.evaluate_window(window, piece)
+
+        for r in range(self.GRID_HEIGHT - 3):
+            for c in range(self.GRID_WIDTH - 3):
+                window = [board[r + 3 - i][c + i] for i in range(WINDOW_LENGTH)]
+                score += self.evaluate_window(window, piece)
+
         return score
 
+    def evaluate_window(self, window, piece):
+        score = 0
+        opp_piece = self.PLAYER
+        if piece == self.PLAYER:
+            opp_piece = self.OPPONENT
 
-    def get_consecutive_chips(self, state: list, player: str):
-        K = 4  # Number of consecutive chips needed to win
-        # eval_value = 0
+        if window.count(piece) == 4:
+            score += 100
+        elif window.count(piece) == 3 and window.count(' ') == 1:
+            score += 5
+        elif window.count(piece) == 2 and window.count(' ') == 2:
+            score += 2
 
-        max_consecutive = 0
+        if window.count(opp_piece) == 3 and window.count(' ') == 1:
+            score -= 4
 
-        # Function to check consecutive chips in a line
-        def count_consecutive(line):
-            max_count = 0
-            current_count = 0
-            for chip in line:
-                if chip == player:
-                    current_count += 1
-                    max_count = max(max_count, current_count)
-                else:
-                    current_count = 0
-            return max_count
-
-        # Check rows
-        for row in state:
-            # eval_value += pow(K, count_consecutive(row))
-            if count_consecutive(row) > max_consecutive:
-                max_consecutive = count_consecutive(row)
-
-        # Check columns
-        for j in range(7):
-            column = [state[i][j] for i in range(6)]
-            # eval_value += pow(K, count_consecutive(column))
-            if count_consecutive(column) > max_consecutive:
-                max_consecutive = count_consecutive(column)
-
-        # Check diagonals
-        for i in range(3):
-            for j in range(4):
-                diagonal1 = [state[i + k][j + k] for k in range(K)]
-                diagonal2 = [state[i + K - k - 1][j + k] for k in range(K)]
-                # eval_value += pow(K, count_consecutive(diagonal1))
-                # eval_value += pow(K, count_consecutive(diagonal2))
-                if count_consecutive(diagonal1) > max_consecutive:
-                    max_consecutive = count_consecutive(diagonal1)
-                if count_consecutive(diagonal2) > max_consecutive:
-                    max_consecutive = count_consecutive(diagonal2)
-
-        return max_consecutive
-
-    def get_is_blocked(self, state: list, player: str) -> bool:
-        # returns if the current state will block the user from winning
-        opponent = self.OPPONENT if player == self.PLAYER else self.PLAYER
-
-        # figure out how to adjust this code so that if the first token is opponent and the rest are player, is_blocking=True
-        # or if the first three are player and the last one is opponent, is_blocking=True
-        for col in range(self.GRID_WIDTH):
-            for row in range(self.GRID_HEIGHT - 3):
-                if (state[row][col] == state[row + 1][col] == state[row + 2][col]) and (state[row][col] == opponent) and (state[row + 3][col] == player):
-                    print('BLOCKED VERTICALLY')
-                    return True
-
-        # check if game is won horizontally
-        for row in range(self.GRID_HEIGHT):
-            for col in range(self.GRID_WIDTH - 3):
-                if (state[row][col] == state[row ][col + 1] == state[row][col + 2]) and (state[row][col] == opponent) and (state[row][col + 3] == player):
-                    print('BLOCKED VERTICALLY')
-                    return True
-                if (state[row][col + 1] == state[row ][col + 2] == state[row][col + 3]) and (state[row][col + 1] == opponent) and (state[row][col] == player):
-                    print('BLOCKED VERTICALLY')
-                    return True
-
-        # check if game is won diagonally (bottom-left to top-right)
-        for row in range(self.GRID_HEIGHT - 3):
-            for col in range(self.GRID_WIDTH - 3):
-                if (state[row][col] == state[row + 1][col+1] == state[row + 2][col+2]) and (state[row][col] == opponent) and (state[row + 3][col+3] == player):
-                    print('BLOCKED DIAGONALLY')
-                    return True
-                if (state[row + 1][col+1] == state[row + 2][col+2] == state[row + 3][col + 3]) and (state[row + 3][col + 3] == opponent) and (state[row][col] == player):
-                    print('BLOCKED DIAGONALLY')
-                    return True
-
-        # check if game is won diagonally (bottom-right to top-left)
-        for row in range(self.GRID_HEIGHT - 3):
-            for col in range(3, self.GRID_WIDTH):
-                if (state[row][col] == state[row + 1][col-1] == state[row + 2][col-2]) and (state[row][col] == opponent) and (state[row + 3][col-3] == player):
-                    print('BLOCKED DIAGONALLY')
-                    return True
-                if (state[row + 1][col-1] == state[row + 2][col-2] == state[row + 3][col - 3]) and (state[row + 3][col - 3] == opponent) and (state[row][col] == player):
-                    print('BLOCKED DIAGONALLY')
-                    return True
-
-        return False
-
-    # def evaluate(self, state: list) -> float:
-    #     opponent_score = 0
-    #     player_score = 0
-    #
-    #     # Evaluate the score based on horizontal connections
-    #     for row in range(self.GRID_HEIGHT):
-    #         for col in range(self.GRID_WIDTH - 3):
-    #             window = state[row][col:col + 4]
-    #             opponent_score += self.evaluateWindow(window, self.OPPONENT)
-    #             player_score += self.evaluateWindow(window, self.PLAYER)
-    #
-    #     # Evaluate the score based on vertical connections
-    #     for col in range(self.GRID_WIDTH):
-    #         for row in range(self.GRID_HEIGHT - 3):
-    #             window = [state[row + i][col] for i in range(4)]
-    #             opponent_score += self.evaluateWindow(window, self.OPPONENT)
-    #             player_score += self.evaluateWindow(window, self.PLAYER)
-    #
-    #     # Evaluate the score based on diagonal connections (bottom-left to top-right)
-    #     for row in range(self.GRID_HEIGHT - 3):
-    #         for col in range(self.GRID_WIDTH - 3):
-    #             window = [state[row + i][col + i] for i in range(4)]
-    #             opponent_score += self.evaluateWindow(window, self.OPPONENT)
-    #             player_score += self.evaluateWindow(window, self.PLAYER)
-    #
-    #     # Evaluate the score based on diagonal connections (bottom-right to top-left)
-    #     for row in range(self.GRID_HEIGHT - 3):
-    #         for col in range(3, self.GRID_WIDTH):
-    #             window = [state[row + i][col - i] for i in range(4)]
-    #             opponent_score += self.evaluateWindow(window, self.OPPONENT)
-    #             player_score += self.evaluateWindow(window, self.PLAYER)
-    #
-    #     return opponent_score - player_score
-    #
-    # def evaluateWindow(self, window: list, player: str) -> int:
-    #     score = 0
-    #     opponent = self.OPPONENT if player == self.OPPONENT else self.PLAYER
-    #     player = self.PLAYER if player == self.OPPONENT else self.OPPONENT
-    #
-    #     if window.count(opponent) == 4:
-    #         score += 100
-    #     elif window.count(opponent) == 3:
-    #         score += 5
-    #     elif window.count(opponent) == 2:
-    #         score += 2
-    #
-    #     if window.count(player) == 3:
-    #         score -= 20
-    #     # if window.count(player) == 4:
-    #     #     score -= 200
-    #
-    #     return score
+        return score
 
     def makeRandomOpponentMove(self) -> Tuple[int, int]:
         valid_moves = self.getValidMoves(self.grid)
@@ -303,15 +233,14 @@ class Grid(QObject):
 
         return row, col
 
-    def getNewState(self, move: int):
-        new_state = copy.deepcopy(self.grid)
+    def getNewState(self, move: int, copy: list):
         for row in range(self.GRID_HEIGHT):
-            if new_state[row][move] == ' ':
-                new_state[row][move] = self.OPPONENT
+            if copy[row][move] == ' ':
+                copy[row][move] = self.OPPONENT
                 break
-        return new_state
+        return copy
 
-    def checkIfGameOver(self) -> Union[str, None]:
+    def checkIfGameOver(self, state) -> Union[str, None]:
         # returns the self.PLAYER or self.OPPONENT to tell who won (or None if game is not over yet)
         # check if game is won vertically
         for col in range(self.GRID_WIDTH):
@@ -319,15 +248,14 @@ class Grid(QObject):
             num_continuous = 1
             for row in range(self.GRID_HEIGHT):
                 if previous_color is None:
-                    previous_color = self.grid[row][col]
+                    previous_color = state[row][col]
                     continue
-                token = self.grid[row][col]
+                token = state[row][col]
                 if token != ' ':
                     if token == previous_color:
                         num_continuous += 1
                         if num_continuous == 4:
                             print('WON VERTICALLY')
-                            self.communicate.game_over.emit(token)
                             return token
                     else:
                         num_continuous = 1
@@ -341,15 +269,14 @@ class Grid(QObject):
             num_continuous = 1
             for col in range(self.GRID_WIDTH):
                 if previous_color is None:
-                    previous_color = self.grid[row][col]
+                    previous_color = state[row][col]
                     continue
-                token = self.grid[row][col]
+                token = state[row][col]
                 if token != ' ':
                     if token == previous_color:
                         num_continuous += 1
                         if num_continuous == 4:
                             print('WON HORIZONTALLY')
-                            self.communicate.game_over.emit(token)
                             return token
                     else:
                         num_continuous = 1
@@ -361,17 +288,15 @@ class Grid(QObject):
         # check if game is won diagonally (bottom-left to top-right)
         for row in range(self.GRID_HEIGHT - 3):
             for col in range(self.GRID_WIDTH - 3):
-                if (self.grid[row][col] == self.grid[row + 1][col+1] == self.grid[row + 2][col+2] == self.grid[row + 3][col+3]) and (self.grid[row][col] != ' '):
+                if (state[row][col] == state[row + 1][col+1] == state[row + 2][col+2] == state[row + 3][col+3]) and (state[row][col] != ' '):
                     print('WON DIAGONALLY')
-                    self.communicate.game_over.emit(self.grid[row][col])
-                    return self.grid[row][col]
+                    return state[row][col]
 
         # check if game is won diagonally (bottom-right to top-left)
         for row in range(self.GRID_HEIGHT - 3):
             for col in range(3, self.GRID_WIDTH):
-                if (self.grid[row][col] == self.grid[row + 1][col-1] == self.grid[row + 2][col-2] == self.grid[row + 3][col-3]) and (self.grid[row][col] != ' '):
+                if (state[row][col] == state[row + 1][col-1] == state[row + 2][col-2] == state[row + 3][col-3]) and (state[row][col] != ' '):
                     print('WON DIAGONALLY')
-                    self.communicate.game_over.emit(self.grid[row][col])
-                    return self.grid[row][col]
+                    return state[row][col]
 
-        self.communicate.game_over.emit(None)
+        return None
