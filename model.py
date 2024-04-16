@@ -54,12 +54,12 @@ class Grid(QObject):
                     self.grid[row][opponent_col] = self.OPPONENT
                     opponent_row = row
                     break
+            self.communicate.opponent_move.emit(opponent_row, opponent_col)
 
         winning_piece = self.checkIfGameOver(self.grid)
         if winning_piece:
             self.communicate.game_over.emit(winning_piece)
         # send the move back to the GUI
-        self.communicate.opponent_move.emit(opponent_row, opponent_col)
 
 
 
