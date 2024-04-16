@@ -40,11 +40,10 @@ class Grid(QObject):
         winning_piece = self.checkIfGameOver(self.grid)
         if winning_piece:
             self.communicate.game_over.emit(winning_piece)
-        # for row in self.grid[::-1]:
-        #     print(''.join(row))
-        # make opponent move (and update the grid)
+
         # opponent_row, opponent_col = self.makeRandomOpponentMove()
-        _, opponent_col = self.minimax(self.grid)
+        # _, opponent_col = self.minimax(self.grid)
+        _, opponent_col = self.alphabeta(self.grid)
         print(f'BEST MOVE: {opponent_col}')
         # find the corresponding row and update the grid for the model
         opponent_row = None
@@ -67,12 +66,6 @@ class Grid(QObject):
         pass
 
     def minimax(self, state: list, depth: int = 5, maximizing_player=True):
-        # if depth == 0 or len(self.getValidMoves(state)) == 0:
-        #     if maximizing_player:
-        #         return self.evaluate(state, self.PLAYER), None
-        #     else:
-        #         return self.evaluate(state, self.OPPONENT), None
-
         valid_moves = self.getValidMoves(state)
         winning_piece = self.checkIfGameOver(state)
         is_terminal = True if len(valid_moves) == 0 or winning_piece is not None else False
@@ -99,19 +92,6 @@ class Grid(QObject):
                     best_score = score
                     best_move = move
             return best_score, best_move
-        # if maximizing_player:
-        #     value = float('-inf')
-        #     column = random.choice(valid_moves)
-        #     for col in valid_moves:
-        #         new_state = self.getNewState(col)
-        #         new_score = minimax(b_copy, depth - 1, alpha, beta, False)[1]
-        #         if new_score > value:
-        #             value = new_score
-        #             column = col
-        #         alpha = max(alpha, value)
-        #         if alpha >= beta:
-        #             break
-        #     return column, value
         else:
             best_score = float('inf')
             best_move = None
@@ -125,40 +105,51 @@ class Grid(QObject):
                     best_move = move
             return best_score, best_move
 
-    # def alphaBeta(self, state, depth, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
-    #     if depth == 0 or len(self.getValidMoves(state)) == 0:
-    #         return self.evaluate(state), None
-    #
-    #     valid_moves = self.getValidMoves(state)
-    #
-    #     if maximizing_player:
-    #         best_score = float('-inf')
-    #         best_move = None
-    #         for move in valid_moves:
-    #             new_state = self.getNewState(move)
-    #             score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, False)
-    #             print(f'maximizing player score: {score}')
-    #             if score > best_score:
-    #                 best_score = score
-    #                 best_move = move
-    #             alpha = max(alpha, score)
-    #             if beta <= alpha:
-    #                 break
-    #         return best_score, best_move
-    #     else:
-    #         best_score = float('inf')
-    #         best_move = None
-    #         for move in valid_moves:
-    #             new_state = self.getNewState(move)
-    #             score, _ = self.alphaBeta(new_state, depth - 1, alpha, beta, True)
-    #             print(f'minimizing player score: {score}')
-    #             if score < best_score:
-    #                 best_score = score
-    #                 best_move = move
-    #             beta = min(beta, score)
-    #             if alpha <= beta:
-    #                 break
-    #         return best_score, best_move
+    def alphabeta(self, state: list, depth: int = 5, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
+        valid_moves = self.getValidMoves(state)
+        winning_piece = self.checkIfGameOver(state)
+        is_terminal = True if len(valid_moves) == 0 or winning_piece is not None else False
+        if depth == 0 or is_terminal:
+            if is_terminal:
+                if winning_piece == self.OPPONENT:
+                    return (100000000000000, None)
+                elif winning_piece == self.PLAYER:
+                    return (-10000000000000, None)
+                else:  # Game is over, no more valid moves
+                    return (0, None)
+            else:  # Depth is zero
+                return (self.evaluate(state, self.OPPONENT), None)
+
+        if maximizing_player:
+            best_score = float('-inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = self.getNewState(move, copy.deepcopy(state))
+                score, _ = self.alphabeta(new_state, depth - 1, alpha, beta, False)
+                print(f'maximizing player score: {score}')
+                print(f'maximizing player move: {move}')
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                alpha = max(alpha, score)
+                if beta <= alpha:
+                    break
+            return best_score, best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            for move in valid_moves:
+                new_state = self.getNewState(move, copy.deepcopy(state))
+                score, _ = self.alphabeta(new_state, depth - 1, alpha, beta, True)
+                print(f'minimizing player score: {score}')
+                print(f'minimizing player move: {move}')
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+                beta = min(beta, score)
+                if alpha <= beta:
+                    break
+            return best_score, best_move
 
     def evaluate(self, board, piece):
         score = 0
