@@ -42,8 +42,8 @@ class Grid(QObject):
             self.communicate.game_over.emit(winning_piece)
 
         # opponent_row, opponent_col = self.makeRandomOpponentMove()
-        # _, opponent_col = self.minimax(self.grid)
-        _, opponent_col = self.alphabeta(self.grid)
+        _, opponent_col = self.minimax(self.grid, 3)
+        # _, opponent_col = self.alphabeta(self.grid)
         print(f'BEST MOVE: {opponent_col}')
         # find the corresponding row and update the grid for the model
         opponent_row = None
@@ -53,19 +53,14 @@ class Grid(QObject):
                     self.grid[row][opponent_col] = self.OPPONENT
                     opponent_row = row
                     break
+            # send the move back to the GUI
             self.communicate.opponent_move.emit(opponent_row, opponent_col)
 
         winning_piece = self.checkIfGameOver(self.grid)
         if winning_piece:
             self.communicate.game_over.emit(winning_piece)
-        # send the move back to the GUI
 
-
-
-    def makeStrategicOpponentMove(self) -> None:
-        pass
-
-    def minimax(self, state: list, depth: int = 5, maximizing_player=True):
+    def minimax(self, state: list, depth: int = 3, maximizing_player=True):
         valid_moves = self.getValidMoves(state)
         winning_piece = self.checkIfGameOver(state)
         is_terminal = True if len(valid_moves) == 0 or winning_piece is not None else False
@@ -105,7 +100,7 @@ class Grid(QObject):
                     best_move = move
             return best_score, best_move
 
-    def alphabeta(self, state: list, depth: int = 5, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
+    def alphabeta(self, state: list, depth: int = 3, alpha=float('-inf'), beta=float('inf'), maximizing_player=True):
         valid_moves = self.getValidMoves(state)
         winning_piece = self.checkIfGameOver(state)
         is_terminal = True if len(valid_moves) == 0 or winning_piece is not None else False
@@ -191,9 +186,7 @@ class Grid(QObject):
 
     def evaluate_window(self, window, piece):
         score = 0
-        opp_piece = self.PLAYER
-        if piece == self.PLAYER:
-            opp_piece = self.OPPONENT
+        opp_piece = self.OPPONENT if piece == self.PLAYER else self.PLAYER
 
         if window.count(piece) == 4:
             score += 100

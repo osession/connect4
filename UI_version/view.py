@@ -1,10 +1,8 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QGridLayout, QLabel
-from controller import Communicate
-from model import Grid
-from typing import Tuple
-from PyQt5.QtGui import QColor
-import time
+from UI_version.controller import Communicate
+from UI_version.model import Grid
+
 
 class Connect4(QWidget):
     def __init__(self):
